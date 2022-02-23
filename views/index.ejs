@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earthquake Monitor</title>
+
+  <!-- UIkit CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.11.1/dist/css/uikit.min.css" />
+
+  <!-- UIkit JS -->
+  <script src="https://cdn.jsdelivr.net/npm/uikit@3.11.1/dist/js/uikit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/uikit@3.11.1/dist/js/uikit-icons.min.js"></script>
+
+  <% if(process.env.NODE_ENV !== 'production'){ %>
+  <!-- Add live reload when in development -->
+  <script>
+  document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1"></' + 'script>')
+  </script>
+  <% } %>
+
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="uk-container">
+    <h1 class="uk-heading-small">Earthquake Monitor</h1>
+    <script>
+      function removeSSR(element) {
+        for (const child of element.querySelectorAll('[x-ssr]')) {
+          child.remove()
+        }
+      }
+
+      var socket = io()
+      socket.on('quake data', function(msg) {
+        // Option 2 : as soon as we get new data, remove the server rendered content
+        removeSSR(document.getElementById('quakes'))
+
+        // Always update the store with new data
+        if (Alpine.store('quakes')) {
+          Alpine.store('quakes').quakes = msg
+          Alpine.store('quakes').timestamp = new Date()
+          Alpine.store('quakes').ssrRemoved = true
+        }
+      })
+
+      document.addEventListener('alpine:init', () => {
+        Alpine.store('quakes', {
+          // Option 1 : add server data to store (use x-init to removeSSR elements from page)
+          // quakes: <%- JSON.stringify(quakes) %>
+
+          // Option 2 : leave store empty till we get new data from websocket
+          ssrRemoved: false,
+          quakes: [],
+          timestamp: new Date()
+        })
+      })
+    </script>
+
+    <div x-data="$store.quakes" id="quakes"> <!-- Option 1 : x-init="removeSSR($el)" -->
+      <table class="uk-table">
+        <caption x-text="'Last Update : ' + timestamp"></caption>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Magnitude</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- Elements rendered by Alpine -->
+          <template x-for="quake in quakes">
+            <tr>
+              <td x-text="quake.title"></td>
+              <td x-text="quake.mag"></td>
+              <td>
+                <a class="uk-link-muted" target="_blank" x-bind:href="quake.url">Details</a>
+              </td>
+            </tr>
+          </template>
+
+          <!-- Elements rendered by the server, add x-ssr attribute so we can remove them when updating the data -->
+          <!-- Another option is to use x-show="false" on each server side rendered element so they get hidden when Alpine starts -->
+          <% for(quake of quakes) { %>
+            <tr x-ssr>
+              <td><%= quake.title %></td>
+              <td><%= quake.mag %></td>
+              <td>
+                <a class="uk-link-muted" target="_blank" href="<%= quake.url %>">Details</a>
+              </td>
+            </tr>
+          <% } %>
+
+        </tbody>
+      </table>
+    
+      <% if(quakes.length === 0){ %>
+        <div x-ssr>No current quakes.</div>
+      <% } %>
+      <div x-show="ssrRemoved && quakes.length === 0">No current quakes.</div>
+      
+    </div>
+  </div>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</body>
+</html>
